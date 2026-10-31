@@ -1,0 +1,13 @@
+{
+  "name": "token-zaehler",
+  "owner": {
+    "name": "Noah"
+  },
+  "plugins": [
+    {
+      "name": "token-zaehler",
+      "source": "./"
+    }
+  ],
+  "description": "Token-Zähler für Claude Code: Gesamtverbrauch, Kosten und Tages-Ansicht über dem Eingabefeld."
+}
