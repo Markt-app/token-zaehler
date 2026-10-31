@@ -9,5 +9,5 @@
       "source": "./"
     }
   ],
-  "description": "Token-Zähler für Claude Code: Gesamtverbrauch, Kosten und Tages-Ansicht über dem Eingabefeld."
+  "description": "Token counter for Claude Code: all-time usage, cost and daily heatmap above the prompt."
 }

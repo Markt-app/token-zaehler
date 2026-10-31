@@ -1,6 +1,6 @@
 {
   "name": "token-zaehler",
-  "version":"1.11.0",
-  "description": "Zeigt über dem Eingabefeld, wie viele Tokens du mit Claude Code insgesamt verbraucht hast",
+  "version":"1.12.0",
+  "description": "Shows how many tokens you have used with Claude Code in total, above the prompt box",
   "types": "./types/index.d.ts"
 }

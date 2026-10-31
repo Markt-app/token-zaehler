@@ -15,13 +15,11 @@ const CELL = 10
 const GAP = 3
 
 const groupDigits = (n: number) =>
-  String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 
-// 6_150_000_000 -> "6,15B", 123_600_000 -> "123,6M" (B = Billion im englischen Sinn = Mrd).
+// 6_150_000_000 -> "6.15B", 123_600_000 -> "123.6M".
 const short = (n: number) =>
-  n >= 1e9
-    ? `${(n / 1e9).toFixed(2).replace('.', ',')}B`
-    : `${(n / 1e6).toFixed(1).replace('.', ',')}M`
+  n >= 1e9 ? `${(n / 1e9).toFixed(2)}B` : `${(n / 1e6).toFixed(1)}M`
 
 const localDay = (ms: number) => {
   const d = new Date(ms)
@@ -29,14 +27,20 @@ const localDay = (ms: number) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-// "2026-10-31" -> "Sa 31.10."
+// "2026-10-31" -> "Sat, Oct 31"
 const dayLabel = (day: string) => {
   const [y, m, d] = day.split('-').map(Number)
-  const weekday = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][
+  const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][
     new Date(y ?? 0, (m ?? 1) - 1, d ?? 1).getDay()
   ]
-  return `${weekday} ${day.slice(8)}.${day.slice(5, 7)}.`
+  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][
+    (m ?? 1) - 1
+  ]
+  return `${weekday}, ${month} ${d}`
 }
+
+// 19 -> "7 PM"
+const hourLabel = (hour: number) => `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`
 
 // "claude-opus-5-5" -> "Opus 5.5"
 const modelName = (id: string) => {
@@ -71,10 +75,10 @@ const svg = (height: number, body: string, width = WIDTH) => ({
   height,
 })
 
-// 2543.68 -> "2.543,68 $"
+// 2543.68 -> "$2,543.68"
 const dollars = (n: number) => {
   const cents = Math.round(n * 100)
-  return `${groupDigits(Math.floor(cents / 100))},${String(cents % 100).padStart(2, '0')} $`
+  return `$${groupDigits(Math.floor(cents / 100))}.${String(cents % 100).padStart(2, '0')}`
 }
 
 // Übersicht wie früher, kompakt: Kacheln in zwei Reihen (4 + 3), darunter Kästchen
@@ -82,15 +86,15 @@ const dollars = (n: number) => {
 const overview = (stats: Stats, days: Record<string, number>, nowMs: number) => {
   const rows: [string, string][][] = [
     [
-      ['Sitzungen', groupDigits(stats.sessions)],
-      ['Nachrichten', groupDigits(stats.messages)],
-      ['Tokens gesamt', short(stats.tokens)],
-      ['Kosten (API-Preise)', dollars(stats.cost)],
+      ['Sessions', groupDigits(stats.sessions)],
+      ['Messages', groupDigits(stats.messages)],
+      ['Total tokens', short(stats.tokens)],
+      ['Cost (API prices)', dollars(stats.cost)],
     ],
     [
-      ['Aktive Tage', groupDigits(stats.activeDays)],
-      ['Spitzenstunde', stats.peakHour === null ? '–' : `${stats.peakHour} Uhr`],
-      ['Lieblingsmodell', stats.models[0] ? modelName(stats.models[0][0]) : '–'],
+      ['Active days', groupDigits(stats.activeDays)],
+      ['Peak hour', stats.peakHour === null ? '–' : hourLabel(stats.peakHour)],
+      ['Favorite model', stats.models[0] ? modelName(stats.models[0][0]) : '–'],
     ],
   ]
   let body = rows
@@ -128,7 +132,7 @@ const overview = (stats: Stats, days: Record<string, number>, nowMs: number) => 
       body +=
         `<rect class="l${level}${ring}" x="${week * (CELL + GAP)}" ` +
         `y="${top + row * (CELL + GAP)}" width="${CELL}" height="${CELL}" rx="2">` +
-        `<title>${dayLabel(day)}: ${short(n)} Tokens</title></rect>`
+        `<title>${dayLabel(day)}: ${short(n)} tokens</title></rect>`
     }
   }
 
@@ -176,7 +180,7 @@ const strip = (stats: Stats, days: Record<string, number>, nowMs: number) => {
     .map((day, i) => {
       const n = days[day] ?? 0
       const x = 2 + i * 9
-      const title = `<title>${dayLabel(day)}: ${short(n)} Tokens</title>`
+      const title = `<title>${dayLabel(day)}: ${short(n)} tokens</title>`
       if (n === 0) return `<rect class="l0" x="${x}" y="27" width="6" height="3" rx="1.5">${title}</rect>`
       const height = Math.max(4, Math.round((n / max) * 24))
       const isToday = i === STRIP_DAYS - 1
@@ -190,9 +194,9 @@ const strip = (stats: Stats, days: Record<string, number>, nowMs: number) => {
 
   const groups: [string, string][] = [
     ['TOKENS', short(stats.tokens)],
-    ['ALT', short(stats.rawTokens)],
-    ['KOSTEN', dollars(stats.cost)],
-    ['HEUTE', short(days[localDay(nowMs)] ?? 0)],
+    ['OLD COUNT', short(stats.rawTokens)],
+    ['COST', dollars(stats.cost)],
+    ['TODAY', short(days[localDay(nowMs)] ?? 0)],
   ]
   let x = STRIP_DAYS * 9 + 16
   body += `<line class="div" x1="${x - 8}" y1="4" x2="${x - 8}" y2="30"/>`
@@ -223,7 +227,7 @@ export const register: Register = on => {
     const started = await next(e)
     await $.command.register({
       name: 'tokens',
-      description: 'Token-Statistik über dem Eingabefeld wieder aufklappen',
+      description: 'Show the token stats above the prompt again',
     })
     void refresh($)
     $.clock.every(REFRESH_MS, () => void refresh($))
@@ -234,7 +238,7 @@ export const register: Register = on => {
   on('command.run', { command: 'tokens' }, async $ => {
     await $.state.set(COLLAPSED, false)
 
-    return { text: 'Token-Statistik aufgeklappt.' }
+    return { text: 'Token stats expanded.' }
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -263,7 +267,7 @@ export const register: Register = on => {
       return (
         <Box>
           <Text bold>Σ {short(usage.all.tokens)} Tokens </Text>
-          <Text dimColor>({groupDigits(usage.all.tokens)}) · heute {short(today)}</Text>
+          <Text dimColor>({groupDigits(usage.all.tokens)}) · today {short(today)}</Text>
         </Box>
       )
     }
@@ -279,9 +283,9 @@ export const register: Register = on => {
             width={bar.width}
             height={bar.height}
             isInteractive
-            alt={`${short(usage.all.tokens)} Tokens (alte Zählung ${short(usage.all.rawTokens)}), ${dollars(usage.all.cost)}, heute ${short(today)}`}
+            alt={`${short(usage.all.tokens)} tokens (old count ${short(usage.all.rawTokens)}), ${dollars(usage.all.cost)}, today ${short(today)}`}
           />
-          <Button key="open" label="Statistik" onPress={() => $.state.set(COLLAPSED, false)} />
+          <Button key="open" label="Stats" onPress={() => $.state.set(COLLAPSED, false)} />
         </Box>
       )
     }
@@ -295,13 +299,13 @@ export const register: Register = on => {
           <Box flexDirection="row" gap={1}>
             <Button
               key="overview"
-              label="Übersicht"
+              label="Overview"
               variant={view === 'overview' ? 'primary' : 'secondary'}
               onPress={() => $.state.set(VIEW, 'overview')}
             />
             <Button
               key="models"
-              label="Modelle"
+              label="Models"
               variant={view === 'models' ? 'primary' : 'secondary'}
               onPress={() => $.state.set(VIEW, 'models')}
             />
@@ -309,13 +313,13 @@ export const register: Register = on => {
           <Box flexDirection="row" gap={1}>
             <Button
               key="all"
-              label="Alle"
+              label="All"
               variant={range === 'all' ? 'primary' : 'secondary'}
               onPress={() => $.state.set(RANGE, 'all')}
             />
             <Button
               key="d30"
-              label="30 T"
+              label="30d"
               variant={range === 'd30' ? 'primary' : 'secondary'}
               onPress={() => $.state.set(RANGE, 'd30')}
             />
@@ -328,7 +332,7 @@ export const register: Register = on => {
             width={card.width}
             height={card.height}
             isInteractive
-            alt={`${short(stats.tokens)} Tokens, ${stats.sessions} Sitzungen, ${stats.activeDays} aktive Tage`}
+            alt={`${short(stats.tokens)} tokens, ${stats.sessions} sessions, ${stats.activeDays} active days`}
           />
         </Box>
       </Box>
