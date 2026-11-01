@@ -2,9 +2,15 @@
 # Jede API-Antwort wird einmal gezählt (nach message.id) und im Ledger gemerkt,
 # damit sie auch nach dem automatischen Löschen alter Verläufe mitzählt.
 # Ausgabe: {"days": {"YYYY-MM-DD": n}, "all": Stats, "d30": Stats} (lokale Zeit).
-import collections, datetime, glob, json, os
+import collections, datetime, fcntl, glob, json, os
 
 LEDGER = os.path.expanduser('~/.claude/token-zaehler/ledger.json')
+
+# Mehrere Chats zählen gleichzeitig: immer nur ein Lauf auf einmal, sonst schreiben
+# sich die Läufe gegenseitig halbe Dateien und das Ledger geht verloren.
+os.makedirs(os.path.dirname(LEDGER), exist_ok=True)
+lock = open(LEDGER + '.lock', 'w')
+fcntl.flock(lock, fcntl.LOCK_EX)
 FIELDS = ('input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens')
 
 # API-Preise in $ pro 1 Mio Tokens: Input, Output, Cache-Lesen (claude-api-Skill,
@@ -48,7 +54,7 @@ try:
         stored = json.load(f)
     ledger = {k: v for k, v in stored.items() if isinstance(v, list) and len(v) == 7}
 except (OSError, ValueError):
-    stored, ledger = {}, {}
+    stored, ledger = None, {}
 
 # Pro Datei die schon gelesene Länge merken: jeder Lauf liest nur Neues.
 OFFSETS = os.path.expanduser('~/.claude/token-zaehler/offsets.json')
@@ -57,6 +63,9 @@ try:
         offsets = json.load(f)
 except (OSError, ValueError):
     offsets = {}
+# Ohne lesbares Ledger fehlt alles schon Gelesene: alle Verläufe von vorn lesen.
+if stored is None:
+    stored, offsets = {}, {}
 # Alte Einträge ohne Kosten oder Zeilen: alles noch einmal von vorn lesen.
 # Einträge mit Kosten bleiben (auch aus gelöschten Verläufen), ihre Zeilen zählen neu.
 if len(ledger) < len(stored):
@@ -97,7 +106,6 @@ for path in glob.glob(os.path.expanduser('~/.claude/projects/**/*.jsonl'), recur
             1,
         ]
 
-os.makedirs(os.path.dirname(LEDGER), exist_ok=True)
 with open(LEDGER + '.tmp', 'w') as f:
     json.dump(ledger, f, separators=(',', ':'))
 os.replace(LEDGER + '.tmp', LEDGER)
